@@ -1,0 +1,13 @@
+﻿services:
+  mpesa-api:
+    image: mucheru10/mpesa-analytics-api:latest
+    container_name: mpesa-analytics-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/mpesa.db
+      - SECRET_KEY=change-this-in-production
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    restart: unless-stopped

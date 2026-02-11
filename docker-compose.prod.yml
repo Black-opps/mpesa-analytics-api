@@ -1,0 +1,30 @@
+﻿# Production Docker Compose for MPesa Analytics API
+# Run with: docker-compose -f docker-compose.prod.yml up -d
+
+services:
+  mpesa-api:
+    image: mucheru10/mpesa-analytics-api:latest  # From Docker Hub
+    container_name: mpesa-analytics-api-prod
+    ports:
+      - "8000:8000"
+    volumes:
+      - mpesa-data:/app/data  # Named volume for persistence
+    environment:
+      - DATABASE_URL=sqlite:///./data/mpesa.db
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}  # Use environment variable
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "com.example.description=MPesa Analytics API"
+      - "com.example.version=0.2.1"
+
+volumes:
+  mpesa-data:
+    driver: local

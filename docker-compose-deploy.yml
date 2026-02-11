@@ -1,0 +1,10 @@
+﻿version: '3.8'
+services:
+  mpesa-api:
+    image: mucheru10/mpesa-analytics-api:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - SECRET_KEY=your-secret-key-here

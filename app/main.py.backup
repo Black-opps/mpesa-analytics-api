@@ -1,0 +1,427 @@
+# M-Pesa Analytics API PowerShell Utilities
+# Version 2.0 - Compatible with your FastAPI structure
+
+# Configuration - EDIT THESE IF NEEDED
+$global:MpesaConfig = @{
+    BaseUrl = "http://127.0.0.1:8000"  # Your API URL
+    Username = "admin"                 # Default username
+    Password = "admin"                 # Default password
+    Token = $null
+}
+
+function New-MpesaConnection {
+    <#
+    .SYNOPSIS
+    Creates a connection to the M-Pesa Analytics API
+    .EXAMPLE
+    $conn = New-MpesaConnection
+    #>
+    
+    Write-Host "🔐 Connecting to M-Pesa API..." -ForegroundColor Cyan
+    
+    try {
+        # First, let's test if the API is accessible
+        Write-Host "Testing connection to: $($MpesaConfig.BaseUrl)" -ForegroundColor DarkGray
+        
+        # Get authentication token
+        # Note: Your API uses form data for login
+        $authForm = @{
+            username = $MpesaConfig.Username
+            password = $MpesaConfig.Password
+            grant_type = "password"
+            scope = ""
+        }
+        
+        # Convert to form-urlencoded format
+        $body = @{
+            "username" = $MpesaConfig.Username
+            "password" = $MpesaConfig.Password
+        }
+        
+        $headers = @{
+            "Content-Type" = "application/x-www-form-urlencoded"
+        }
+        
+        Write-Host "Authenticating as: $($MpesaConfig.Username)" -ForegroundColor DarkGray
+        
+        $tokenResponse = Invoke-RestMethod `
+            -Uri "$($MpesaConfig.BaseUrl)/token" `
+            -Method Post `
+            -Body $body `
+            -Headers $headers `
+            -ErrorAction Stop
+        
+        # Store the token
+        $MpesaConfig.Token = $tokenResponse.access_token
+        
+        Write-Host "✅ Authentication successful!" -ForegroundColor Green
+        
+        # Return connection object
+        return @{
+            BaseUrl = $MpesaConfig.BaseUrl
+            Headers = @{
+                "Authorization" = "Bearer $($MpesaConfig.Token)"
+                "Content-Type" = "application/json"
+            }
+            Config = $MpesaConfig
+        }
+    }
+    catch {
+        Write-Host "❌ Connection failed!" -ForegroundColor Red
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        
+        if ($_.Exception.Response) {
+            try {
+                $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+                $reader.BaseStream.Position = 0
+                $reader.DiscardBufferedData()
+                $responseBody = $reader.ReadToEnd()
+                Write-Host "Response: $responseBody" -ForegroundColor Yellow
+            }
+            catch {
+                Write-Host "Could not read error response" -ForegroundColor DarkGray
+            }
+        }
+        
+        Write-Host "`nTroubleshooting tips:" -ForegroundColor Yellow
+        Write-Host "1. Make sure API is running: uvicorn main:app --reload" -ForegroundColor White
+        Write-Host "2. Check URL in browser: $($MpesaConfig.BaseUrl)/docs" -ForegroundColor White
+        Write-Host "3. Try different URL: http://localhost:8000 or http://127.0.0.1:8000" -ForegroundColor White
+        
+        throw $_.Exception
+    }
+}
+
+function Add-MpesaTransaction {
+    <#
+    .SYNOPSIS
+    Adds a single M-Pesa transaction
+    .EXAMPLE
+    $result = Add-MpesaTransaction $conn -TransactionId "TX001" -Amount 1000 -TransactionType "Payment" -Counterparty "John" -Timestamp (Get-Date)
+    #>
+    
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Connection,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$TransactionId,
+        
+        [Parameter(Mandatory=$true)]
+        [double]$Amount,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$TransactionType,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$Counterparty,
+        
+        [Parameter(Mandatory=$true)]
+        [DateTime]$Timestamp
+    )
+    
+    Write-Host "➕ Adding single transaction..." -ForegroundColor Cyan
+    
+    # Create transaction wrapped in array (API expects list)
+    $transactions = @(
+        @{
+            transaction_id = $TransactionId
+            amount = [double]$Amount  # Ensure it's double
+            transaction_type = $TransactionType
+            counterparty = $Counterparty
+            timestamp = $Timestamp.ToString("yyyy-MM-ddTHH:mm:ss")
+        }
+    )
+    
+    return Add-MpesaTransactions -Connection $Connection -Transactions $transactions
+}
+
+function Add-MpesaTransactions {
+    <#
+    .SYNOPSIS
+    Adds multiple transactions in batch
+    .EXAMPLE
+    $batch = @(@{transaction_id="TX1"; amount=100; ...}, @{transaction_id="TX2"; amount=200; ...})
+    $result = Add-MpesaTransactions $conn -Transactions $batch
+    #>
+    
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Connection,
+        
+        [Parameter(Mandatory=$true)]
+        [array]$Transactions
+    )
+    
+    Write-Host "📦 Adding $($Transactions.Count) transactions..." -ForegroundColor Cyan
+    
+    # Format transactions properly
+    $formattedTransactions = @()
+    foreach ($tx in $Transactions) {
+        $formattedTx = @{
+            transaction_id = [string]$tx.transaction_id
+            amount = [double]$tx.amount
+            transaction_type = [string]$tx.transaction_type
+            counterparty = [string]$tx.counterparty
+        }
+        
+        # Handle timestamp conversion
+        if ($tx.timestamp -is [DateTime]) {
+            $formattedTx.timestamp = $tx.timestamp.ToString("yyyy-MM-ddTHH:mm:ss")
+        }
+        else {
+            # Try to parse string to DateTime
+            try {
+                $dt = [DateTime]::Parse($tx.timestamp)
+                $formattedTx.timestamp = $dt.ToString("yyyy-MM-ddTHH:mm:ss")
+            }
+            catch {
+                # If parsing fails, use as-is
+                $formattedTx.timestamp = [string]$tx.timestamp
+            }
+        }
+        
+        $formattedTransactions += $formattedTx
+    }
+    
+    $jsonBody = $formattedTransactions | ConvertTo-Json -Depth 3 -Compress
+    
+    Write-Host "Endpoint: $($Connection.BaseUrl)/transactions" -ForegroundColor DarkGray
+    
+    try {
+        $response = Invoke-RestMethod `
+            -Uri "$($Connection.BaseUrl)/transactions" `
+            -Method Post `
+            -Headers $Connection.Headers `
+            -Body $jsonBody `
+            -ErrorAction Stop
+        
+        Write-Host "✅ Success: $($response.inserted) inserted" -ForegroundColor Green
+        return $response
+    }
+    catch {
+        Write-Host "❌ Failed to add transactions" -ForegroundColor Red
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        
+        # Try to get detailed error response
+        if ($_.Exception.Response) {
+            try {
+                $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+                $reader.BaseStream.Position = 0
+                $reader.DiscardBufferedData()
+                $responseBody = $reader.ReadToEnd()
+                Write-Host "API Response: $responseBody" -ForegroundColor Yellow
+            }
+            catch {
+                Write-Host "Could not read detailed error" -ForegroundColor DarkGray
+            }
+        }
+        
+        # Show the JSON that was sent for debugging
+        Write-Host "`nSent JSON:" -ForegroundColor DarkGray
+        Write-Host $jsonBody -ForegroundColor Gray
+        
+        throw $_.Exception
+    }
+}
+
+function Get-MpesaAnalytics {
+    <#
+    .SYNOPSIS
+    Gets analytics from the API
+    .EXAMPLE
+    $analytics = Get-MpesaAnalytics $conn
+    #>
+    
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Connection
+    )
+    
+    Write-Host "📊 Getting analytics..." -ForegroundColor Cyan
+    
+    try {
+        $response = Invoke-RestMethod `
+            -Uri "$($Connection.BaseUrl)/analytics" `
+            -Method Get `
+            -Headers $Connection.Headers `
+            -ErrorAction Stop
+        
+        Write-Host "✅ Analytics retrieved" -ForegroundColor Green
+        return $response
+    }
+    catch {
+        Write-Host "❌ Failed to get analytics" -ForegroundColor Red
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        throw $_.Exception
+    }
+}
+
+function Get-MpesaTransactions {
+    <#
+    .SYNOPSIS
+    Gets transactions with optional filtering
+    .EXAMPLE
+    # Get all transactions
+    $txs = Get-MpesaTransactions $conn
+    
+    # Get with filters
+    $txs = Get-MpesaTransactions $conn -Limit 10 -TransactionType "Payment"
+    #>
+    
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Connection,
+        
+        [int]$Limit = 100,
+        [int]$Offset = 0,
+        [string]$TransactionType,
+        [string]$StartDate,
+        [string]$EndDate
+    )
+    
+    Write-Host "📋 Getting transactions..." -ForegroundColor Cyan
+    
+    # Build query parameters
+    $queryParams = @("limit=$Limit", "offset=$Offset")
+    
+    if ($TransactionType) {
+        $queryParams += "transaction_type=$TransactionType"
+    }
+    
+    if ($StartDate) {
+        $queryParams += "start_date=$StartDate"
+    }
+    
+    if ($EndDate) {
+        $queryParams += "end_date=$EndDate"
+    }
+    
+    $queryString = if ($queryParams) { "?" + ($queryParams -join "&") } else { "" }
+    
+    try {
+        $response = Invoke-RestMethod `
+            -Uri "$($Connection.BaseUrl)/transactions$queryString" `
+            -Method Get `
+            -Headers $Connection.Headers `
+            -ErrorAction Stop
+        
+        Write-Host "✅ Retrieved $($response.transactions.Count) transactions (total: $($response.total))" -ForegroundColor Green
+        return $response
+    }
+    catch {
+        Write-Host "❌ Failed to get transactions" -ForegroundColor Red
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        throw $_.Exception
+    }
+}
+
+function Test-MpesaConnection {
+    <#
+    .SYNOPSIS
+    Tests if the API is accessible and working
+    .EXAMPLE
+    $result = Test-MpesaConnection
+    if ($result) { Write-Host "API is working!" }
+    #>
+    
+    Write-Host "🔍 Testing M-Pesa API Connection..." -ForegroundColor Cyan
+    
+    try {
+        # First test without auth
+        Write-Host "1. Testing basic connectivity..." -ForegroundColor DarkGray
+        $health = Invoke-RestMethod -Uri "$($MpesaConfig.BaseUrl)/" -Method Get -TimeoutSec 3 -ErrorAction Stop
+        Write-Host "   ✅ API is running: $($health.status)" -ForegroundColor Green
+        
+        # Test authentication
+        Write-Host "2. Testing authentication..." -ForegroundColor DarkGray
+        $conn = New-MpesaConnection -ErrorAction Stop
+        Write-Host "   ✅ Authentication successful" -ForegroundColor Green
+        
+        # Test analytics endpoint
+        Write-Host "3. Testing analytics endpoint..." -ForegroundColor DarkGray
+        $analytics = Get-MpesaAnalytics -Connection $conn -ErrorAction Stop
+        Write-Host "   ✅ Analytics working: $($analytics.transaction_count) transactions" -ForegroundColor Green
+        
+        Write-Host "`n✅ ALL TESTS PASSED!" -ForegroundColor Green
+        Write-Host "   URL: $($conn.BaseUrl)" -ForegroundColor White
+        Write-Host "   Version: $($health.version)" -ForegroundColor White
+        
+        return $true
+    }
+    catch {
+        Write-Host "❌ Connection test failed: $($_.Exception.Message)" -ForegroundColor Red
+        
+        if ($_.Exception.Message -like "*could not be resolved*") {
+            Write-Host "`nMake sure:" -ForegroundColor Yellow
+            Write-Host "1. Your API is running: uvicorn main:app --reload" -ForegroundColor White
+            Write-Host "2. You're using the correct URL" -ForegroundColor White
+            Write-Host "3. No firewall is blocking port 8000" -ForegroundColor White
+        }
+        
+        return $false
+    }
+}
+
+# Helper function for manual testing
+function Invoke-MpesaRequest {
+    <#
+    .SYNOPSIS
+    Sends a raw request to the M-Pesa API
+    .EXAMPLE
+    # Test token endpoint
+    Invoke-MpesaRequest -Method Post -Endpoint "/token" -Body @{username="admin";password="admin"}
+    #>
+    
+    param(
+        [string]$Method = "GET",
+        [string]$Endpoint,
+        [hashtable]$Body,
+        [hashtable]$Headers = @{}
+    )
+    
+    $uri = "$($MpesaConfig.BaseUrl)$Endpoint"
+    
+    $params = @{
+        Uri = $uri
+        Method = $Method
+    }
+    
+    if ($Headers.Count -gt 0) {
+        $params.Headers = $Headers
+    }
+    
+    if ($Body -and $Body.Count -gt 0) {
+        if ($Method -in @("POST", "PUT", "PATCH")) {
+            $params.Body = ($Body | ConvertTo-Json)
+            if (-not $params.Headers["Content-Type"]) {
+                $params.Headers["Content-Type"] = "application/json"
+            }
+        }
+        else {
+            # For GET requests, add as query parameters
+            $queryString = ($Body.Keys | ForEach-Object { "$_=$($Body[$_])" }) -join "&"
+            $params.Uri = "$uri?$queryString"
+        }
+    }
+    
+    try {
+        Write-Host "🌐 $Method $uri" -ForegroundColor DarkCyan
+        if ($params.Body) {
+            Write-Host "Body: $($params.Body)" -ForegroundColor DarkGray
+        }
+        
+        $response = Invoke-RestMethod @params
+        Write-Host "✅ Success" -ForegroundColor Green
+        return $response
+    }
+    catch {
+        Write-Host "❌ Error: $($_.Exception.Message)" -ForegroundColor Red
+        if ($_.Exception.Response) {
+            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+            $responseBody = $reader.ReadToEnd()
+            Write-Host "Response: $responseBody" -ForegroundColor Yellow
+        }
+        throw $_.Exception
+    }
+}
