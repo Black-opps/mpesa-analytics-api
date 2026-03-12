@@ -54,3 +54,59 @@ This API serves as the powerful engine for a modern fintech dashboard, enabling 
 | **Language** | Python 3.12+ | Modern Python with full type hinting support. |
 
 ## 📂 **Project Structure**
+mpesa-analytics-api/
+├── app/
+│ ├── init.py
+│ ├── main.py # FastAPI application entry point, CORS, middleware
+│ ├── core/ # Core configurations and security
+│ │ ├── init.py
+│ │ ├── database.py # Database engine and session management
+│ │ └── security.py # JWT handling, password hashing, auth dependencies
+│ ├── models/ # SQLAlchemy ORM models
+│ │ ├── init.py
+│ │ ├── user.py # User model with role and status
+│ │ └── transaction.py # Transaction model
+│ ├── routers/ # API route handlers (versioned)
+│ │ ├── init.py
+│ │ ├── auth.py # Authentication endpoints (/auth)
+│ │ ├── users.py # User profile endpoints (/users)
+│ │ ├── admin.py # Admin-only endpoints (/admin)
+│ │ ├── analytics.py # Analytics endpoints (/analytics)
+│ │ └── transactions.py # Transaction endpoints (/transactions)
+│ ├── schemas/ # Pydantic models for request/response validation
+│ │ ├── init.py
+│ │ ├── user.py
+│ │ ├── transaction.py
+│ │ ├── analytics.py
+│ │ └── token.py
+│ └── services.py # Core business logic layer
+├── data/ # SQLite database file location (git-ignored)
+├── scripts/ # Utility and management scripts
+│ ├── reset_db.py # Reset and seed the database
+│ ├── check_db.py # Inspect database contents
+│ ├── add_test_data.py # Generate test transactions
+│ └── list_users.py # List all users in the system
+├── requirements.txt # Python dependencies
+├── Dockerfile # Docker build instructions
+├── docker-compose.yml # Local Docker setup
+├── .env.example # Example environment variables
+└── start.ps1 # Convenience start script for Windows
+
+
+##  **Quick Start (5 Minutes)**
+
+Get the API up and running locally.
+
+### **Prerequisites**
+*   Python 3.12+
+*   Docker and Docker Compose (optional, for containerized run)
+
+### **Installation & Setup**
+
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/Black-opps/mpesa-analytics-api.git
+    cd mpesa-analytics-api
+
+### **Run with Docker**
+docker-compose up --build
