@@ -2,9 +2,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
+from typing import Optional, List, Dict, Any
 from app import models   
-from app.models import Transaction
+from app.models import Transaction, User
 from app.schemas import TransactionCreate, AnalyticsResponse
+from app.schemas.analytics import AnalyticsResponse
+
 
 
 # Check your create_transactions function
@@ -49,21 +52,55 @@ def fetch_transactions(db: Session):
 
 
 def compute_analytics(db: Session, user_id: int):
+    """
+    Compute analytics for a specific user
+    Returns dict with total_sent, total_received, transaction_count
+    """
     transactions = (
         db.query(models.Transaction)
         .filter(models.Transaction.user_id == user_id)
         .all()
     )
 
+    # Based on your transaction types, determine which are "sent" vs "received"
+    # Typically, send_money, pay_bill, buy_goods, withdraw are money going OUT (sent)
+    # You might have receive_money for money coming IN (received)
+    
+    sent_types = ["send_money", "pay_bill", "buy_goods", "withdraw"]
+    received_types = ["receive_money"]  # Add this if you have it
+    
     total_sent = sum(
-        t.amount for t in transactions if t.transaction_type == "debit"
+        t.amount for t in transactions if t.transaction_type in sent_types
     )
+    
     total_received = sum(
-        t.amount for t in transactions if t.transaction_type == "credit"
+        t.amount for t in transactions if t.transaction_type in received_types
     )
+    
+    # Calculate unique customers (unique counterparties)
+    unique_customers = len(set(t.counterparty for t in transactions))
 
     return {
         "total_sent": total_sent,
         "total_received": total_received,
         "transaction_count": len(transactions),
+        "unique_customers": unique_customers  # Add this for the dashboard
     }
+# app/services.py - Add this helper function
+
+def get_user_data_with_permission_check(
+    db: Session, 
+    current_user: User, 
+    requested_user_id: Optional[int] = None
+) -> int:
+    """
+    Helper function to determine which user_id to use based on permissions
+    Regular users: always use their own ID
+    Admins: can use requested_user_id or their own
+    """
+    if current_user.role == "admin" and requested_user_id is not None:
+        # Admin can view any user's data
+        return requested_user_id
+    else:
+        # Regular users can only view their own
+        return current_user.id
