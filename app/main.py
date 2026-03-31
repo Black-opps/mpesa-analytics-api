@@ -1,6 +1,7 @@
 ﻿# app/main.py - COMPLETE CLEANED VERSION
 
-from fastapi import FastAPI, Depends, HTTPException, status, Query
+from fastapi import FastAPI
+from .middleware.tenant_middleware import TenantContextMiddleware, Depends, HTTPException, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
