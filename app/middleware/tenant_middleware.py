@@ -5,8 +5,9 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 import logging
+import httpx
 
-from ..services.auth_client import auth_client
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,17 +31,27 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         if authorization and authorization.startswith("Bearer "):
             token = authorization.replace("Bearer ", "")
             try:
-                # Verify token and get user info
-                user_data = await auth_client.verify_token(token)
-                
-                # Store in request state
-                request.state.user = user_data
-                request.state.tenant_id = user_data.get("tenant_id")
-                request.state.user_id = user_data.get("sub")
-                request.state.user_role = user_data.get("role", "viewer")
-                
-                logger.debug(f"Tenant context: {request.state.tenant_id}")
-                
+                # Verify token with auth-service
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{settings.AUTH_SERVICE_URL}/api/v1/tokens/introspect",
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=5.0
+                    )
+                    
+                    if response.status_code == 200:
+                        user_data = response.json()
+                        
+                        # Store in request state
+                        request.state.user = user_data
+                        request.state.tenant_id = user_data.get("tenant_id")
+                        request.state.user_id = user_data.get("sub")
+                        request.state.user_role = user_data.get("role", "viewer")
+                        
+                        logger.debug(f"Tenant context: {request.state.tenant_id}")
+                    else:
+                        logger.warning(f"Token verification failed: {response.status_code}")
+                        
             except Exception as e:
                 logger.warning(f"Failed to extract tenant context: {e}")
         

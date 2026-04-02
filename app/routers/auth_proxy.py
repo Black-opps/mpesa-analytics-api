@@ -1,7 +1,7 @@
 ﻿"""
 Auth proxy router - forwards auth requests to auth-service.
 """
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Response
 import httpx
 import logging
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 logger = logging.getLogger(__name__)
 
 
-@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy_auth(request: Request, path: str):
     """
     Proxy all auth requests to auth-service.
