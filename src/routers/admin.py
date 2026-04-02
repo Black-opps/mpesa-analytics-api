@@ -7,9 +7,9 @@ from typing import List
 from datetime import datetime, timedelta
 import logging
 
-from app.core.database import get_db
-from app.dependencies.security import require_admin_user
-from app.models import User, Transaction
+from src.core.database import get_db
+from src.dependencies.security import require_admin_user
+from src.models import User, Transaction
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)

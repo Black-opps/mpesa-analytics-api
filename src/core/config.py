@@ -1,22 +1,10 @@
 ﻿"""
-Configuration management for API gateway.
+Configuration management for API Gateway.
 """
 from pydantic_settings import BaseSettings
-from pydantic import Field, field_validator
-from typing import List, Optional
-from pydantic_settings import BaseSettings
+from pydantic import Field
+from typing import List
 
-
-class Settings(BaseSettings):
-
-    JWT_SECRET_KEY: str = "CHANGE_THIS_IN_PRODUCTION"
-    JWT_ALGORITHM: str = "HS256"
-
-    class Config:
-        env_file = ".env"
-
-
-settings = Settings()
 
 class Settings(BaseSettings):
     """Application settings."""
@@ -27,33 +15,27 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
     
-    # Database (for analytics data)
-    DATABASE_URL: str = Field("sqlite:///./data/analytics.db", env="DATABASE_URL")
-    
-    # Service URLs
+    # Service URLs (all 10 microservices)
     AUTH_SERVICE_URL: str = Field("http://localhost:8007", env="AUTH_SERVICE_URL")
     TENANT_SERVICE_URL: str = Field("http://localhost:8004", env="TENANT_SERVICE_URL")
+    BILLING_SERVICE_URL: str = Field("http://localhost:8005", env="BILLING_SERVICE_URL")
+    PAYMENT_SERVICE_URL: str = Field("http://localhost:8006", env="PAYMENT_SERVICE_URL")
+    PARSER_SERVICE_URL: str = Field("http://localhost:8000", env="PARSER_SERVICE_URL")
+    CATEGORIZER_SERVICE_URL: str = Field("http://localhost:8001", env="CATEGORIZER_SERVICE_URL")
+    ANALYZER_SERVICE_URL: str = Field("http://localhost:8002", env="ANALYZER_SERVICE_URL")
+    WEBHOOK_SERVICE_URL: str = Field("http://localhost:8008", env="WEBHOOK_SERVICE_URL")
     
-    # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    # Database (for analytics data only)
+    DATABASE_URL: str = Field("sqlite:///./analytics.db", env="DATABASE_URL")
     
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v):
-        """Parse CORS_ORIGINS from environment variable."""
-        if isinstance(v, str):
-            if v.startswith('[') and v.endswith(']'):
-                import json
-                try:
-                    return json.loads(v)
-                except json.JSONDecodeError:
-                    pass
-            return [origin.strip() for origin in v.split(',') if origin.strip()]
-        return v
+    # CORS - Hardcoded (not from env)
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8003"]
+    
+    # Logging
+    LOG_LEVEL: str = "INFO"
     
     class Config:
         env_file = ".env"
-        case_sensitive = True
         extra = "ignore"
 
 
