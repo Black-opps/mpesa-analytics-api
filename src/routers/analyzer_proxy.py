@@ -1,7 +1,7 @@
 """
 Analyzer proxy router - forwards requests to cashflow-analyzer.
 """
-from fastapi import APIRouter, Request, HTTPException, Response, Depends
+from fastapi import APIRouter, Request, HTTPException, Response, Depends, Path, Query
 import httpx
 import logging
 
@@ -12,17 +12,23 @@ router = APIRouter(prefix="/analytics", tags=["Cashflow Analytics"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/summary")
+@router.get("/summary/{tenant_id}")
 async def get_analytics_summary(
     request: Request,
-    days: int = 30,
+    tenant_id: str = Path(..., description="Tenant ID"),
+    days: int = Query(30, ge=1, le=365),
+    group_by: str = Query("day", regex="^(day|week|month)$"),
     user: dict = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_tenant_id)
+    current_tenant: str = Depends(get_current_tenant_id)
 ):
     """
     Get cashflow analytics summary.
     """
-    url = f"{settings.ANALYZER_SERVICE_URL}/api/v1/cashflow/summary/{tenant_id}?days={days}"
+    # Verify tenant matches
+    if current_tenant != tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant mismatch")
+    
+    url = f"{settings.ANALYZER_SERVICE_URL}/api/v1/cashflow/summary/{tenant_id}?days={days}&group_by={group_by}"
     headers = dict(request.headers)
     headers.pop("host", None)
     
@@ -120,3 +126,9 @@ async def detect_patterns(
             status_code=503,
             detail="Analytics service unavailable"
         )
+
+
+@router.get("/ping")
+async def ping():
+    """Ping endpoint to test if router is working."""
+    return {"status": "pong", "service": "analytics-proxy"}

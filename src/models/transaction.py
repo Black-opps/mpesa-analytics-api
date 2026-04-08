@@ -1,9 +1,7 @@
-# app/models/transaction.py
-
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Index
+﻿from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.core.database import Base
+from src.core.database import Base
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -20,9 +18,4 @@ class Transaction(Base):
     user = relationship("User", back_populates="transactions")
 
 # Composite index for efficient queries
-Index(
-    "idx_user_type_timestamp",
-    Transaction.user_id,
-    Transaction.transaction_type,
-    Transaction.timestamp,
-)
+Index("idx_user_type_timestamp", Transaction.user_id, Transaction.transaction_type, Transaction.timestamp)

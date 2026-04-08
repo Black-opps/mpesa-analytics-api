@@ -3,7 +3,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.core.database import Base
+from src.core.database import Base
 
 class Customer(Base):
     __tablename__ = "customers"
