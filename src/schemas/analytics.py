@@ -1,39 +1,18 @@
-# app/schemas/analytics.py - CREATE THIS FILE
-
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
 
 class AnalyticsResponse(BaseModel):
     total_sent: float
     total_received: float
     transaction_count: int
-    unique_customers: int = 0  # Add this field with default
+    unique_customers: Optional[int] = 0
 
-    
-    class Config:
-        from_attributes = True
-
-class DailyAnalyticsResponse(BaseModel):
+class DailyAnalytics(BaseModel):
     date: str
-    amount: float
-    count: Optional[int] = 0
-    
-    class Config:
-        from_attributes = True
+    total_amount: float
+    transaction_count: int
 
-class TransactionTypeResponse(BaseModel):
+class TransactionTypeAnalytics(BaseModel):
     type: str
     amount: float
     count: int
-    
-    class Config:
-        from_attributes = True
-
-class TopCustomerResponse(BaseModel):
-    counterparty: str
-    total: float
-    count: int
-    
-    class Config:
-        from_attributes = True

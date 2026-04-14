@@ -1,8 +1,5 @@
-# app/schemas/transaction.py
-
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
 
 class TransactionBase(BaseModel):
     transaction_id: str

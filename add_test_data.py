@@ -1,118 +1,60 @@
-# add_test_data.py
-
-import requests
-import json
+﻿from src.core.database import SessionLocal
+from src.models import Transaction, User
 from datetime import datetime, timedelta
 import random
 
-# Configuration
-BASE_URL = "http://localhost:8000"
-EMAIL = "test@example.com"
-PASSWORD = "password123"
+db = SessionLocal()
 
-def main():
-    # First, try to login
-    session = requests.Session()
-    
-    print("1. Logging in...")
-    login_data = {
-        "username": EMAIL,
-        "password": PASSWORD
-    }
-    
-    response = session.post(
-        f"{BASE_URL}/auth/login",
-        data=login_data,
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
-    )
-    
-    if response.status_code != 200:
-        print("Login failed. Trying to register...")
-        # Try to register
-        register_data = {
-            "email": EMAIL,
-            "password": PASSWORD
-        }
-        response = session.post(
-            f"{BASE_URL}/auth/register",
-            json=register_data
-        )
-        if response.status_code != 200:
-            print(f"Registration failed: {response.text}")
-            return
-        
-        print("Registration successful. Logging in...")
-        response = session.post(
-            f"{BASE_URL}/auth/login",
-            data=login_data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-    
-    token = response.json().get("access_token")
-    print(f"✅ Login successful. Token: {token[:20]}...")
-    
-    # Set authorization header
-    headers = {"Authorization": f"Bearer {token}"}
-    
-    # Create sample transactions
-    print("\n2. Creating sample transactions...")
-    
-    transaction_types = ["send_money", "pay_bill", "buy_goods", "withdraw"]
-    counterparties = [
-        "254712345678", "254723456789", "254734567890", 
-        "254745678901", "254756789012", "254767890123"
-    ]
-    
-    transactions = []
-    for i in range(1, 21):  # Create 20 transactions
-        days_ago = random.randint(0, 30)
-        transactions.append({
-            "transaction_id": f"TXN{1000 + i}",
-            "amount": random.randint(100, 5000),
-            "transaction_type": random.choice(transaction_types),
-            "counterparty": random.choice(counterparties),
-            "timestamp": (datetime.now() - timedelta(days=days_ago)).isoformat()
-        })
-    
-    response = session.post(
-        f"{BASE_URL}/transactions",
-        json=transactions,
-        headers=headers
-    )
-    
-    if response.status_code == 201 or response.status_code == 200:
-        print(f"✅ Created {len(transactions)} transactions")
-        print(f"Response: {response.json()}")
-    else:
-        print(f"❌ Failed to create transactions: {response.text}")
-    
-    # Check analytics
-    print("\n3. Checking analytics...")
-    response = session.get(
-        f"{BASE_URL}/analytics",
-        headers=headers
-    )
-    
-    if response.status_code == 200:
-        analytics = response.json()
-        print(f"✅ Analytics: {analytics}")
-    else:
-        print(f"❌ Failed to get analytics: {response.text}")
-    
-    # Check transactions
-    print("\n4. Checking transactions list...")
-    response = session.get(
-        f"{BASE_URL}/transactions?skip=0&limit=100",
-        headers=headers
-    )
-    
-    if response.status_code == 200:
-        transactions = response.json()
-        print(f"✅ Found {len(transactions)} transactions")
-        if transactions:
-            print(f"First transaction: {transactions[0]}")
-    else:
-        print(f"❌ Failed to get transactions: {response.text}")
+# Get the admin user
+admin = db.query(User).filter(User.email == "admin@example.com").first()
+if not admin:
+    print("Admin user not found!")
+    exit()
 
-if __name__ == "__main__":
-    main()
+# Add sample transactions
+transactions = [
+    Transaction(
+        transaction_id=f"TXN{random.randint(100000, 999999)}",
+        amount=1500.00,
+        transaction_type="send_money",
+        counterparty="254712345678",
+        timestamp=datetime.now() - timedelta(days=5),
+        user_id=admin.id
+    ),
+    Transaction(
+        transaction_id=f"TXN{random.randint(100000, 999999)}",
+        amount=3200.50,
+        transaction_type="pay_bill",
+        counterparty="123456",
+        timestamp=datetime.now() - timedelta(days=3),
+        user_id=admin.id
+    ),
+    Transaction(
+        transaction_id=f"TXN{random.randint(100000, 999999)}",
+        amount=750.25,
+        transaction_type="buy_goods",
+        counterparty="789012",
+        timestamp=datetime.now() - timedelta(days=1),
+        user_id=admin.id
+    ),
+    Transaction(
+        transaction_id=f"TXN{random.randint(100000, 999999)}",
+        amount=5000.00,
+        transaction_type="send_money",
+        counterparty="254798765432",
+        timestamp=datetime.now(),
+        user_id=admin.id
+    ),
+]
+
+for tx in transactions:
+    db.add(tx)
+
+db.commit()
+print(f"✅ Added {len(transactions)} test transactions for user {admin.email}")
+
+# Verify
+count = db.query(Transaction).filter(Transaction.user_id == admin.id).count()
+print(f"Total transactions for user: {count}")
+
+db.close()

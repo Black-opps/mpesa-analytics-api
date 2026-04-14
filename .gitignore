@@ -1,51 +1,12 @@
-# Virtual environments
+﻿__pycache__/
+*.pyc
 venv/
 .venv/
-env/
-ENV/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.pyc
-*.pyo
-*.pyd
-
-# Environment variables
 .env
-.env.local
-.env.*.local
-
-# Database files
 *.db
-*.sqlite3
 *.sqlite
-
-# Logs
-*.log
 logs/
-
-# Testing
+.DS_Store
 .pytest_cache/
 .coverage
 htmlcov/
-coverage.xml
-
-# IDE and editor
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS generated files
-.DS_Store
-Thumbs.db
-ehthumbs.db
-
-# Docker
-.dockerignore
-
-# Temporary files
-tmp/
-temp/
