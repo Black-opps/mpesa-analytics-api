@@ -1,12 +1,33 @@
-﻿__pycache__/
-*.pyc
+﻿# Python
 venv/
-.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
 .env
+.env.*
+!.env.template
+
+# Database
 *.db
 *.sqlite
-logs/
-.DS_Store
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+
+# Testing
 .pytest_cache/
 .coverage
-htmlcov/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Backup files
+*.backup
+*.bak

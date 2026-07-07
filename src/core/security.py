@@ -53,7 +53,7 @@ async def get_current_user(
         from src.models.user import User
         user = db.query(User).filter(User.email == "admin@example.com").first()
         if user:
-            print("⚠️ Using development fallback user (admin@example.com)")
+            print("WARNING: Using development fallback user (admin@example.com)")
             return user
         raise credentials_exception
     
@@ -70,7 +70,7 @@ async def get_current_user(
         print(f"✅ Token decoded successfully: user_id={user_id}, email={email}")
         
     except JWTError as e:
-        print(f"❌ JWT Error: {e}")
+        print(f"[ERROR] JWT Error: {e}")
         raise credentials_exception
     except Exception as e:
         print(f"❌ Unexpected error: {e}")

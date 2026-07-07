@@ -1,76 +1,118 @@
-﻿"""
-FastAPI dependencies for the API gateway.
-"""
-from fastapi import Depends, HTTPException, status, Request
-from typing import Optional, Dict, Any
-import logging
+﻿# src/core/dependencies.py - COMPLETE WITH LOCAL JWT VALIDATION
 
-from ..services.auth_client import auth_client
+import itertools
+import logging
+import time
+from typing import Any, Dict
+
+import jwt
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWKClient
+from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+security = HTTPBearer()
 
-async def get_current_user(request: Request) -> Dict[str, Any]:
+# ✅ Call counter for debugging
+auth_counter = itertools.count(1)
+
+# ✅ Local JWKS client for RS256 validation
+_jwks_client = None
+
+
+def get_jwks_client():
+    """Get or create JWKS client for local JWT validation."""
+    global _jwks_client
+    if _jwks_client is None:
+        try:
+            _jwks_client = PyJWKClient(settings.JWKS_URL)
+            logger.info(f"✅ JWKS client initialized with URL: {settings.JWKS_URL}")
+            print(f"✅ JWKS client initialized with URL: {settings.JWKS_URL}")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize JWKS client: {e}")
+            raise
+    return _jwks_client
+
+
+async def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> Dict[str, Any]:
     """
-    Get current user from JWT token via auth-service.
+    Get current user from JWT token - VALIDATED LOCALLY.
+    No HTTP call to auth service!
     """
-    authorization = request.headers.get("Authorization")
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    scheme, token = authorization.split()
-    if scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication scheme",
-        )
-    
+    call_id = next(auth_counter)
+    start = time.perf_counter()
+    token = credentials.credentials
+
+    print(f"🔐 LOCAL_JWT_VALIDATION #{call_id} START")
+    logger.info(f"🔐 LOCAL_JWT_VALIDATION #{call_id} START")
+
     try:
-        user_data = await auth_client.verify_token(token)
-        return user_data
-    except HTTPException:
-        raise
+        # ✅ Validate JWT locally using RS256
+        jwks_client = get_jwks_client()
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"verify_signature": True},
+        )
+
+        elapsed = (time.perf_counter() - start) * 1000
+        print(f"🔐 LOCAL_JWT_VALIDATION #{call_id} END {elapsed:.2f}ms")
+        logger.info(f"🔐 LOCAL_JWT_VALIDATION #{call_id} END {elapsed:.2f}ms")
+
+        # Return user data from JWT payload
+        return {
+            "id": payload.get("sub"),
+            "email": payload.get("email"),
+            "role": payload.get("role"),
+            "tenant_id": payload.get("tenant_id"),
+        }
+
+    except jwt.ExpiredSignatureError:
+        elapsed = (time.perf_counter() - start) * 1000
+        logger.error(f"❌ Token expired after {elapsed:.2f}ms")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
+        )
+    except jwt.InvalidTokenError as e:
+        elapsed = (time.perf_counter() - start) * 1000
+        logger.error(f"❌ Invalid token after {elapsed:.2f}ms: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
     except Exception as e:
-        logger.error(f"Authentication error: {e}")
+        elapsed = (time.perf_counter() - start) * 1000
+        logger.error(f"❌ Authentication error after {elapsed:.2f}ms: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
         )
 
 
-async def get_current_tenant_id(user: Dict[str, Any] = Depends(get_current_user)) -> str:
+async def get_current_tenant_id(
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> str:
     """
     Get current tenant ID from authenticated user.
     """
+    start = time.perf_counter()
     tenant_id = user.get("tenant_id")
+    elapsed = (time.perf_counter() - start) * 1000
+    print(f"⏱️ TENANT_ID={elapsed:.2f}ms")
+    logger.info(f"⏱️ TENANT_ID={elapsed:.2f}ms")
+
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User does not belong to a tenant",
         )
     return tenant_id
-
-
-def require_permission(permission: str):
-    """
-    Dependency factory for requiring specific permissions.
-    """
-    async def dependency(user: Dict[str, Any] = Depends(get_current_user)):
-        user_permissions = user.get("permissions", [])
-        user_role = user.get("role", "viewer")
-        
-        # Admin has all permissions
-        if user_role == "admin":
-            return user
-        
-        if permission not in user_permissions and "*" not in user_permissions:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission required: {permission}",
-            )
-        return user
-    return dependency

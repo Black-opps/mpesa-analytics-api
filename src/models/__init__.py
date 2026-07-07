@@ -1,4 +1,5 @@
-﻿from src.models.user import User
+﻿# src/models/__init__.py
+
 from src.models.transaction import Transaction
 
-__all__ = ["User", "Transaction"]
+__all__ = ["Transaction"]
